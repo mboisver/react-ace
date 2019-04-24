@@ -60,8 +60,8 @@ export default class DiffComponent extends Component {
     };
 
     const cursor = {
-      left: 1,
-      right: 1,
+      left: { row: 1, col: 1 },
+      right: { row: 1, col: 1 },
     };
 
     diff.forEach(chunk => {
@@ -76,18 +76,25 @@ export default class DiffComponent extends Component {
 
       const firstChar = text[0];
       const lastChar = text[text.length - 1];
+      const lastLineLength = text.length - text.lastIndexOf('\n') - 1;
       let linesToHighlight = 0;
 
       switch (chunkType) {
         case C.DIFF_EQUAL:
-          cursor.left += lines;
-          cursor.right += lines;
+          if (lines !== 0) {
+            cursor.left.col = 1;
+            cursor.right.col = 1;
+          }
+          cursor.left.row += lines;
+          cursor.left.col += lastLineLength;
+          cursor.right.row += lines;
+          cursor.right.col += lastLineLength;
 
           break;
         case C.DIFF_DELETE:
           // If the deletion starts with a newline, push the cursor down to that line
           if (firstChar === '\n') {
-            cursor.left++;
+            cursor.left.row++;
             lines--;
           }
 
@@ -96,9 +103,11 @@ export default class DiffComponent extends Component {
           // If the deletion does not include a newline, highlight the same line on the right
           if (linesToHighlight === 0) {
             diffedLines.right.push({
-              startLine: cursor.right,
-              endLine: cursor.right,
+              startLine: cursor.right.row,
+              endLine: cursor.right.row,
             });
+          } else {
+            cursor.left.col = 1;
           }
 
           // If the last character is a newline, we don't want to highlight that line
@@ -107,16 +116,26 @@ export default class DiffComponent extends Component {
           }
 
           diffedLines.left.push({
-            startLine: cursor.left,
-            endLine: cursor.left + linesToHighlight,
+            startLine: cursor.left.row,
+            endLine: cursor.left.row + linesToHighlight,
           });
 
-          cursor.left += lines;
+          if (lastLineLength > 0 && this.props.diffLineSegments) {
+            diffedLines.left.push({
+              startLine: cursor.left.row,
+              startCharacter: cursor.left.col,
+              endLine: cursor.left.row + linesToHighlight,
+              endCharacter: cursor.left.col + lastLineLength,
+            });
+          }
+
+          cursor.left.row += lines;
+          cursor.left.col += lastLineLength;
           break;
         case C.DIFF_INSERT:
           // If the insertion starts with a newline, push the cursor down to that line
           if (firstChar === '\n') {
-            cursor.right++;
+            cursor.right.row++;
             lines--;
           }
 
@@ -125,9 +144,11 @@ export default class DiffComponent extends Component {
           // If the insertion does not include a newline, highlight the same line on the left
           if (linesToHighlight === 0) {
             diffedLines.left.push({
-              startLine: cursor.left,
-              endLine: cursor.left,
+              startLine: cursor.left.row,
+              endLine: cursor.left.row,
             });
+          } else {
+            cursor.right.col = 1;
           }
 
           // If the last character is a newline, we don't want to highlight that line
@@ -136,11 +157,21 @@ export default class DiffComponent extends Component {
           }
 
           diffedLines.right.push({
-            startLine: cursor.right,
-            endLine: cursor.right + linesToHighlight,
+            startLine: cursor.right.row,
+            endLine: cursor.right.row + linesToHighlight,
           });
 
-          cursor.right += lines;
+          if (lastLineLength > 0 && this.props.diffLineSegments) {
+            diffedLines.right.push({
+              startLine: cursor.right.row,
+              startCharacter: cursor.right.col,
+              endLine: cursor.right.row + linesToHighlight,
+              endCharacter: cursor.right.col + lastLineLength,
+            });
+          }
+
+          cursor.right.row += lines;
+          cursor.right.col += lastLineLength;
           break;
         default:
           throw new Error('Diff type was not defined.');
@@ -160,21 +191,27 @@ export default class DiffComponent extends Component {
     };
 
     for (let i = 0; i < diffedLines.left.length; i++) {
+      let partialHighlight = diffedLines.left[i].endCharacter > diffedLines.left[i].startCharacter;
       let markerObj = {
         startRow: diffedLines.left[i].startLine - 1,
-        endRow: diffedLines.left[i].endLine,
+        startCol: diffedLines.left[i].startCharacter - 1,
+        endRow: partialHighlight ? diffedLines.left[i].endLine - 1 : diffedLines.left[i].endLine,
+        endCol: diffedLines.left[i].endCharacter - 1,
         type: 'text',
-        className: 'codeMarker',
+        className: 'codeMarker' + (partialHighlight ? ' codeMarker-lineSegment' : ''),
       };
       newMarkerSet.left.push(markerObj);
     }
 
     for (let i = 0; i < diffedLines.right.length; i++) {
+      let partialHighlight = diffedLines.right[i].endCharacter > diffedLines.right[i].startCharacter;
       let markerObj = {
         startRow: diffedLines.right[i].startLine - 1,
-        endRow: diffedLines.right[i].endLine,
+        startCol: diffedLines.right[i].startCharacter - 1,
+        endRow: partialHighlight ? diffedLines.right[i].endLine - 1 : diffedLines.right[i].endLine,
+        endCol: diffedLines.right[i].endCharacter - 1,
         type: 'text',
-        className: 'codeMarker',
+        className: 'codeMarker' + (partialHighlight ? ' codeMarker-lineSegment' : ''),
       };
       newMarkerSet.right.push(markerObj);
     }
@@ -256,6 +293,7 @@ DiffComponent.propTypes = {
   value: PropTypes.array,
   width: PropTypes.string,
   wrapEnabled: PropTypes.bool,
+  diffLineSegments: PropTypes.bool,
 };
 
 DiffComponent.defaultProps = {
@@ -288,4 +326,5 @@ DiffComponent.defaultProps = {
   value: ['', ''],
   width: '500px',
   wrapEnabled: true,
+  diffLineSegments: false,
 };
