@@ -60,6 +60,7 @@ export default class SplitComponent extends Component {
     // in a split scenario we don't want a print margin for the entire application
     this.editor.setShowPrintMargin(false);
     this.editor.renderer.setShowGutter(false);
+    this.editor.setHighlightActiveLine(this.props.highlightActiveLine);
     // get a list of possible options to avoid 'misspelled option errors'
     const availableOptions = this.splitEditor.$options;
     if (this.props.debounceChangePeriod) {
