@@ -198,7 +198,7 @@ export default class DiffComponent extends Component {
         endRow: partialHighlight ? diffedLines.left[i].endLine - 1 : diffedLines.left[i].endLine,
         endCol: diffedLines.left[i].endCharacter - 1,
         type: 'text',
-        className: 'codeMarker' + (partialHighlight ? ' codeMarker-lineSegment' : ''),
+        className: 'codeMarker codeMarker-left' + (partialHighlight ? ' codeMarker-lineSegment' : ''),
       };
       newMarkerSet.left.push(markerObj);
     }
@@ -211,7 +211,7 @@ export default class DiffComponent extends Component {
         endRow: partialHighlight ? diffedLines.right[i].endLine - 1 : diffedLines.right[i].endLine,
         endCol: diffedLines.right[i].endCharacter - 1,
         type: 'text',
-        className: 'codeMarker' + (partialHighlight ? ' codeMarker-lineSegment' : ''),
+        className: 'codeMarker codeMarker-right' + (partialHighlight ? ' codeMarker-lineSegment' : ''),
       };
       newMarkerSet.right.push(markerObj);
     }
