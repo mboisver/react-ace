@@ -295,9 +295,35 @@ export default class SplitComponent extends Component {
     }
   }
 
-  onScroll() {
+  onScroll(scrollTop, editSession) {
     if (this.props.onScroll) {
       this.props.onScroll(this.editor);
+    }
+
+    if (!this.autoScrolling && this.props.enableScrollSync) {
+      this.autoScrolling = true;
+      const targetEditors = {};
+      let sourceEditor;
+      let sourceEditorIndex;
+      for (let i = 0; i < this.props.splits; i++) {
+        if (this.editor.env.split.getEditor(i).getSession().id === editSession.id) {
+          sourceEditor = this.editor.env.split.getEditor(i)
+          sourceEditorIndex = i;
+        } else {
+          targetEditors[i] = this.editor.env.split.getEditor(i);
+        }
+      }
+      for (const i in targetEditors) {
+        const targetEditor = targetEditors[i];
+        const sourceRow = sourceEditor.getFirstVisibleRow() + 1;
+        const targetRow = this.props.scrollSyncLines[sourceEditorIndex][sourceRow][i];
+        const targetAtBottom = targetEditor.getLastVisibleRow() === targetEditor.getSession().getLength() - 1;
+        const scrollDirection = targetRow - 1 > targetEditor.getFirstVisibleRow() ? "DOWN" : targetRow - 1 < targetEditor.getFirstVisibleRow() ? "UP" : "SAME";
+        if (!targetAtBottom  || scrollDirection === "UP") {
+          targetEditor.scrollToRow(targetRow - 1);
+        }
+      }
+      this.autoScrolling = false;
     }
   }
 
@@ -385,6 +411,8 @@ SplitComponent.propTypes = {
   enableBasicAutocompletion: PropTypes.oneOfType([PropTypes.bool, PropTypes.array]),
   enableLiveAutocompletion: PropTypes.oneOfType([PropTypes.bool, PropTypes.array]),
   commands: PropTypes.array,
+  enableScrollSync: PropTypes.bool,
+  scrollSyncLines: PropTypes.array,
 };
 
 SplitComponent.defaultProps = {
@@ -417,4 +445,6 @@ SplitComponent.defaultProps = {
   wrapEnabled: false,
   enableBasicAutocompletion: false,
   enableLiveAutocompletion: false,
+  enableScrollSync: false,
+  scrollSyncLines: [],
 };

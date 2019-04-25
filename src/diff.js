@@ -120,7 +120,7 @@ export default class DiffComponent extends Component {
             endLine: cursor.left.row + linesToHighlight,
           });
 
-          if (lastLineLength > 0 && this.props.diffLineSegments) {
+          if (lastLineLength > 0 && this.props.enableLineSegments) {
             diffedLines.left.push({
               startLine: cursor.left.row,
               startCharacter: cursor.left.col,
@@ -161,7 +161,7 @@ export default class DiffComponent extends Component {
             endLine: cursor.right.row + linesToHighlight,
           });
 
-          if (lastLineLength > 0 && this.props.diffLineSegments) {
+          if (lastLineLength > 0 && this.props.enableLineSegments) {
             diffedLines.right.push({
               startLine: cursor.right.row,
               startCharacter: cursor.right.col,
@@ -198,7 +198,7 @@ export default class DiffComponent extends Component {
         endRow: partialHighlight ? diffedLines.left[i].endLine - 1 : diffedLines.left[i].endLine,
         endCol: diffedLines.left[i].endCharacter - 1,
         type: 'text',
-        className: 'codeMarker codeMarker-left' + (partialHighlight ? ' codeMarker-lineSegment' : ''),
+        className: 'codeMarker ' + this.props.markerClassNames[0] + (partialHighlight ? ' codeMarker-lineSegment' : ''),
       };
       newMarkerSet.left.push(markerObj);
     }
@@ -211,7 +211,7 @@ export default class DiffComponent extends Component {
         endRow: partialHighlight ? diffedLines.right[i].endLine - 1 : diffedLines.right[i].endLine,
         endCol: diffedLines.right[i].endCharacter - 1,
         type: 'text',
-        className: 'codeMarker codeMarker-right' + (partialHighlight ? ' codeMarker-lineSegment' : ''),
+        className: 'codeMarker ' + this.props.markerClassNames[1] + (partialHighlight ? ' codeMarker-lineSegment' : ''),
       };
       newMarkerSet.right.push(markerObj);
     }
@@ -222,8 +222,40 @@ export default class DiffComponent extends Component {
     return codeEditorSettings;
   }
 
+  lineSkips(sourceMarkers, sourceLength, targetMarkers, targetLength, targetIndex) {
+    const rows = {};
+    const rangeContains = index => range => index >= range.startRow && index < range.endRow;
+    for (let sourceRow = 0, targetRow = -1; sourceRow < sourceLength; sourceRow++) {
+      rows[sourceRow] = [];
+      const markedOnSource = sourceMarkers.find(rangeContains(sourceRow));
+      const markedOnTarget = targetMarkers.find(rangeContains(targetRow + 1));
+      if ((!markedOnSource && !markedOnTarget) || (markedOnSource && markedOnTarget)) {
+        rows[sourceRow][targetIndex] = ++targetRow;
+      } else if (markedOnSource) {
+        rows[sourceRow][targetIndex] = targetRow;
+      } else if (markedOnTarget) {
+        sourceRow--;
+        targetRow++;
+      }
+    }
+    return rows;
+  }
+
+  scrollSyncLines(diff) {
+    const leftMarkers = diff[0];
+    const leftLines = this.props.value[0].split('\n').length;
+    const rightMarkers = diff[1];
+    const rightLines = this.props.value[1].split('\n').length;
+
+    return [
+      this.lineSkips(leftMarkers, leftLines, rightMarkers, rightLines, 1),
+      this.lineSkips(rightMarkers, rightLines, leftMarkers, leftLines, 0)
+    ];
+  }
+
   render() {
     const markers = this.diff();
+    const lineSkips = this.scrollSyncLines(markers);
     return (
       <SplitEditor
         name={this.props.name}
@@ -255,6 +287,8 @@ export default class DiffComponent extends Component {
         wrapEnabled={this.props.wrapEnabled}
         enableBasicAutocompletion={this.props.enableBasicAutocompletion}
         enableLiveAutocompletion={this.props.enableLiveAutocompletion}
+        enableScrollSync={this.props.enableScrollSync}
+        scrollSyncLines={lineSkips}
         value={this.state.value}
         markers={markers}
       />
@@ -293,7 +327,9 @@ DiffComponent.propTypes = {
   value: PropTypes.array,
   width: PropTypes.string,
   wrapEnabled: PropTypes.bool,
-  diffLineSegments: PropTypes.bool,
+  enableLineSegments: PropTypes.bool,
+  enableScrollSync: PropTypes.bool,
+  markerClassNames: PropTypes.array,
 };
 
 DiffComponent.defaultProps = {
@@ -326,5 +362,7 @@ DiffComponent.defaultProps = {
   value: ['', ''],
   width: '500px',
   wrapEnabled: true,
-  diffLineSegments: false,
+  enableLineSegments: false,
+  enableScrollSync: false,
+  markerClassNames: ['', ''],
 };
