@@ -32,19 +32,33 @@ export default class DiffComponent extends Component {
 
   diff() {
     const dmp = new DiffMatchPatch();
-    const lhString = this.state.value[0];
-    const rhString = this.state.value[1];
 
-    if (lhString.length === 0 && rhString.length === 0) {
-      return [];
+    const markers = [];
+    for (let i = 0; i < this.state.value.length; i++) {
+      markers[i] = [];
     }
 
-    const diff = dmp.diff_main(lhString, rhString);
-    dmp.diff_cleanupSemantic(diff);
+    for (let i = 0; i < this.state.value.length; i++) {
+      const lhString = this.state.value[i];
+      for (let j = 0; j < this.state.value.length; j++) {
+        const rhString = this.state.value[j];
+        if (i < j) {
+          const diff = dmp.diff_main(lhString, rhString);
+          dmp.diff_cleanupSemantic(diff);
 
-    const diffedLines = this.generateDiffedLines(diff);
-    const codeEditorSettings = this.setCodeMarkers(diffedLines);
-    return codeEditorSettings;
+          if (lhString.length === 0 && rhString.length === 0) {
+            markers.push({});
+            continue;
+          }
+
+          const diffedLines = this.generateDiffedLines(diff);
+          const codeEditorSettings = this.setCodeMarkers(diffedLines, [i, j]);
+          markers[i][j] = [codeEditorSettings[0], codeEditorSettings[1]];
+        }
+      }
+    }
+
+    return markers;
   }
 
   generateDiffedLines(diff) {
@@ -95,6 +109,7 @@ export default class DiffComponent extends Component {
           // If the deletion starts with a newline, push the cursor down to that line
           if (firstChar === '\n') {
             cursor.left.row++;
+            cursor.left.col = 1;
             lines--;
           }
 
@@ -105,9 +120,8 @@ export default class DiffComponent extends Component {
             diffedLines.right.push({
               startLine: cursor.right.row,
               endLine: cursor.right.row,
+              type: 'line',
             });
-          } else {
-            cursor.left.col = 1;
           }
 
           // If the last character is a newline, we don't want to highlight that line
@@ -118,14 +132,16 @@ export default class DiffComponent extends Component {
           diffedLines.left.push({
             startLine: cursor.left.row,
             endLine: cursor.left.row + linesToHighlight,
+            type: 'line',
           });
 
-          if (lastLineLength > 0 && this.props.enableLineSegments) {
+          if (this.props.enableLineSegments && (cursor.left.col > 1 || linesToHighlight === 0)) {
             diffedLines.left.push({
               startLine: cursor.left.row,
               startCharacter: cursor.left.col,
               endLine: cursor.left.row + linesToHighlight,
-              endCharacter: cursor.left.col + lastLineLength,
+              endCharacter: lastLineLength + (linesToHighlight === 0 ? cursor.left.col : 0),
+              type: 'line-segment',
             });
           }
 
@@ -136,6 +152,7 @@ export default class DiffComponent extends Component {
           // If the insertion starts with a newline, push the cursor down to that line
           if (firstChar === '\n') {
             cursor.right.row++;
+            cursor.right.col = 1;
             lines--;
           }
 
@@ -146,9 +163,8 @@ export default class DiffComponent extends Component {
             diffedLines.left.push({
               startLine: cursor.left.row,
               endLine: cursor.left.row,
+              type: 'line',
             });
-          } else {
-            cursor.right.col = 1;
           }
 
           // If the last character is a newline, we don't want to highlight that line
@@ -159,14 +175,16 @@ export default class DiffComponent extends Component {
           diffedLines.right.push({
             startLine: cursor.right.row,
             endLine: cursor.right.row + linesToHighlight,
+            type: 'line',
           });
 
-          if (lastLineLength > 0 && this.props.enableLineSegments) {
+          if (this.props.enableLineSegments && (cursor.right.col > 1 || linesToHighlight === 0)) {
             diffedLines.right.push({
               startLine: cursor.right.row,
               startCharacter: cursor.right.col,
               endLine: cursor.right.row + linesToHighlight,
-              endCharacter: cursor.right.col + lastLineLength,
+              endCharacter: lastLineLength + (linesToHighlight === 0 ? cursor.right.col : 0),
+              type: 'line-segment',
             });
           }
 
@@ -182,7 +200,7 @@ export default class DiffComponent extends Component {
 
   // Receives a collection of line numbers and iterates through them to highlight appropriately
   // Returns an object that tells the render() method how to display the code editors
-  setCodeMarkers(diffedLines = { left: [], right: [] }) {
+  setCodeMarkers(diffedLines = { left: [], right: [] }, indices) {
     const codeEditorSettings = [];
 
     const newMarkerSet = {
@@ -191,28 +209,46 @@ export default class DiffComponent extends Component {
     };
 
     for (let i = 0; i < diffedLines.left.length; i++) {
-      let partialHighlight = diffedLines.left[i].endCharacter > diffedLines.left[i].startCharacter;
-      let markerObj = {
-        startRow: diffedLines.left[i].startLine - 1,
-        startCol: diffedLines.left[i].startCharacter - 1,
-        endRow: partialHighlight ? diffedLines.left[i].endLine - 1 : diffedLines.left[i].endLine,
-        endCol: diffedLines.left[i].endCharacter - 1,
-        type: 'text',
-        className: 'codeMarker ' + this.props.markerClassNames[0] + (partialHighlight ? ' codeMarker-lineSegment' : ''),
-      };
+      let markerObj;
+      if (diffedLines.left[i].type === 'line') {
+        markerObj = {
+          startRow: diffedLines.left[i].startLine - 1,
+          endRow: diffedLines.left[i].endLine,
+          type: 'text',
+          className: 'codeMarker ' + this.props.markerClassNames[indices[0]],
+        }
+      } else {
+        markerObj = {
+          startRow: diffedLines.left[i].startLine - 1,
+          startCol: diffedLines.left[i].startCharacter - 1,
+          endRow: diffedLines.left[i].endLine - 1,
+          endCol: diffedLines.left[i].endCharacter - 1,
+          type: 'text',
+          className: 'codeMarker codeMarker-lineSegment ' + this.props.markerClassNames[indices[0]],
+        };
+      }
       newMarkerSet.left.push(markerObj);
     }
 
     for (let i = 0; i < diffedLines.right.length; i++) {
-      let partialHighlight = diffedLines.right[i].endCharacter > diffedLines.right[i].startCharacter;
-      let markerObj = {
-        startRow: diffedLines.right[i].startLine - 1,
-        startCol: diffedLines.right[i].startCharacter - 1,
-        endRow: partialHighlight ? diffedLines.right[i].endLine - 1 : diffedLines.right[i].endLine,
-        endCol: diffedLines.right[i].endCharacter - 1,
-        type: 'text',
-        className: 'codeMarker ' + this.props.markerClassNames[1] + (partialHighlight ? ' codeMarker-lineSegment' : ''),
-      };
+      let markerObj;
+      if (diffedLines.right[i].type === 'line') {
+        markerObj = {
+          startRow: diffedLines.right[i].startLine - 1,
+          endRow: diffedLines.right[i].endLine,
+          type: 'text',
+          className: 'codeMarker ' + this.props.markerClassNames[indices[1]],
+        }
+      } else {
+        markerObj = {
+          startRow: diffedLines.right[i].startLine - 1,
+          startCol: diffedLines.right[i].startCharacter - 1,
+          endRow: diffedLines.right[i].endLine - 1,
+          endCol: diffedLines.right[i].endCharacter - 1,
+          type: 'text',
+          className: 'codeMarker codeMarker-lineSegment ' + this.props.markerClassNames[indices[1]],
+        };
+      }
       newMarkerSet.right.push(markerObj);
     }
 
@@ -222,40 +258,88 @@ export default class DiffComponent extends Component {
     return codeEditorSettings;
   }
 
-  lineSkips(sourceMarkers, sourceLength, targetMarkers, targetLength, targetIndex) {
+  lineSkips(source, targets) {
     const rows = {};
-    const rangeContains = index => range => index >= range.startRow && index < range.endRow;
-    for (let sourceRow = 0, targetRow = -1; sourceRow < sourceLength; sourceRow++) {
+    for (let sourceRow = 0; sourceRow < source.lines; sourceRow++) {
       rows[sourceRow] = [];
-      const markedOnSource = sourceMarkers.find(rangeContains(sourceRow));
-      const markedOnTarget = targetMarkers.find(rangeContains(targetRow + 1));
-      if ((!markedOnSource && !markedOnTarget) || (markedOnSource && markedOnTarget)) {
-        rows[sourceRow][targetIndex] = ++targetRow;
-      } else if (markedOnSource) {
-        rows[sourceRow][targetIndex] = targetRow;
-      } else if (markedOnTarget) {
-        sourceRow--;
-        targetRow++;
+    }
+    const rangeContains = index => range => index >= range.startRow && index < range.endRow;
+    for (const targetIndex in targets) {
+      const target = targets[targetIndex];
+      for (let sourceRow = 0, targetRow = -1; sourceRow < source.lines; sourceRow++) {
+        const markedOnSource = source.markers.find(rangeContains(sourceRow));
+        const markedOnTarget = target.markers.find(rangeContains(targetRow + 1));
+        if ((!markedOnSource && !markedOnTarget) || (markedOnSource && markedOnTarget)) {
+          rows[sourceRow][targetIndex] = ++targetRow;
+        } else if (markedOnSource) {
+          rows[sourceRow][targetIndex] = targetRow;
+        } else if (markedOnTarget) {
+          sourceRow--;
+          targetRow++;
+        }
       }
     }
     return rows;
   }
 
   scrollSyncLines(diff) {
-    const leftMarkers = diff[0];
-    const leftLines = this.props.value[0].split('\n').length;
-    const rightMarkers = diff[1];
-    const rightLines = this.props.value[1].split('\n').length;
+    const lineSkips = [];
 
-    return [
-      this.lineSkips(leftMarkers, leftLines, rightMarkers, rightLines, 1),
-      this.lineSkips(rightMarkers, rightLines, leftMarkers, leftLines, 0)
-    ];
+    for (let i = 0; i < this.props.value.length; i++) {
+      const targets = {};
+      const source = { index: i, markers: diff[i], lines: this.props.value[i].split('\n').length };
+      for (let j = 0; j < this.props.value.length; j++) {
+        if (i !== j) {
+          targets[j] = { index: j, markers: diff[j], lines: this.props.value[j].split('\n').length };
+        }
+      }
+      lineSkips.push(this.lineSkips(source, targets));
+    }
+
+    return lineSkips;
+  }
+
+  flattenDiffs(diffs) {
+    const markers = [];
+    for (let i = 0; i < diffs.length; i++) {
+      markers[i] = [];
+    }
+    const markerEquals = marker1 => marker2 =>
+      marker1.startRow === marker2.startRow &&
+      marker1.startCol === marker2.startCol &&
+      marker1.endRow === marker2.endRow &&
+      marker1.endCol === marker2.endCol;
+    const markerOverlaps = marker1 => marker2 =>
+      (marker1.startRow <= marker2.startRow && marker1.endRow >= marker2.startRow && ((!marker1.startCol && !marker2.startCol && !marker1.endCol) || (marker1.startCol <= marker2.startCol && marker1.endCol >= marker2.startCol))) ||
+      (marker2.startRow <= marker1.startRow && marker2.endRow >= marker1.startRow && ((!marker2.startCol && !marker1.startCol && !marker2.endCol) || (marker2.startCol <= marker1.startCol && marker2.endCol >= marker1.startCol)));
+    for (let i = 0; i < diffs.length; i++) {
+      for (let j = 0; j < diffs.length; j++) {
+        if (diffs[i][j]) {
+          markers[i] = [...markers[i], ...diffs[i][j][0]];
+          markers[j] = [...markers[j], ...diffs[i][j][1]];
+        }
+      }
+    }
+    return markers.map(arr => arr.reduce((accumulator, currentMarker) => {
+      const overlappedMarker = accumulator.find(markerOverlaps(currentMarker));
+      if (overlappedMarker) {
+        overlappedMarker.startRow = Math.min(currentMarker.startRow, overlappedMarker.startRow);
+        overlappedMarker.startCol = Math.min(currentMarker.startCol, overlappedMarker.startCol);
+        overlappedMarker.endRow = Math.max(currentMarker.endRow, overlappedMarker.endRow);
+        overlappedMarker.endCol = Math.max(currentMarker.endCol, overlappedMarker.endCol);
+      } else if (!accumulator.find(markerEquals(currentMarker))) {
+        accumulator.push(currentMarker);
+      }
+      return accumulator;
+    }, []));
   }
 
   render() {
-    const markers = this.diff();
-    const lineSkips = this.scrollSyncLines(markers);
+    const markers = this.flattenDiffs(this.diff());
+    const lineSkips = this.props.enableScrollSync ? this.scrollSyncLines(markers) : [];
+    if (this.props.noDiffRender && !markers.find(arr => arr.length > 0)) {
+      return this.props.noDiffRender;
+    }
     return (
       <SplitEditor
         name={this.props.name}
@@ -330,6 +414,7 @@ DiffComponent.propTypes = {
   enableLineSegments: PropTypes.bool,
   enableScrollSync: PropTypes.bool,
   markerClassNames: PropTypes.array,
+  noDiffRender: PropTypes.object,
 };
 
 DiffComponent.defaultProps = {
@@ -365,4 +450,5 @@ DiffComponent.defaultProps = {
   enableLineSegments: false,
   enableScrollSync: false,
   markerClassNames: ['', ''],
+  noDiffRender: undefined,
 };
